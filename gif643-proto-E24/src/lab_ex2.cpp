@@ -54,10 +54,6 @@ void cons()
             lock.unlock();
             printf("Reçu: %d\n", v);
         }
-        else{
-            break;
-        }
-
     }
 
 }
