@@ -360,7 +360,7 @@ int main(int argc, char** argv)
     }
 
     // TODO: change the number of threads from args.
-    Processor proc;
+    Processor proc(24); //CHange threads numbers Temporaire
     
     while (!std::cin.eof()) {
 
