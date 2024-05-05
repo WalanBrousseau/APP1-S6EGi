@@ -24,7 +24,7 @@ std::condition_variable cond_var;
 
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
-const int       NUM_THREADS = 4;    // Default value, changed by argv. 
+const int       NUM_THREADS = 1;    // Default value, changed by argv. 
 
 using PNGDataVec = std::vector<char>;
 using PNGDataPtr = std::shared_ptr<PNGDataVec>;
