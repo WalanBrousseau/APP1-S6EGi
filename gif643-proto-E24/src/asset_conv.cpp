@@ -13,8 +13,13 @@
 #include <cstring>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 namespace gif643 {
+
+std::mutex      mutex_, output_mutex;
+std::condition_variable cond_var;
+
 
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
@@ -182,6 +187,9 @@ public:
 class Processor
 {
 private:
+    bool should_run_; // Used to signal the end of the processor to threads.
+    int running_Threads_nb = 0;
+
     // The tasks to run queue (FIFO).
     std::queue<TaskDef> task_queue_;
     std::vector<std::thread> queue_threads_;
@@ -190,25 +198,24 @@ private:
     using PNGHashMap = std::unordered_map<std::string, PNGDataPtr>;
     PNGHashMap png_cache_;
 
-    bool should_run_; // Used to signal the end of the processor to threads.
-
+    
 public:
     Processor(int n_threads = NUM_THREADS):
         should_run_(true)
     {
         if (n_threads <= 0) {
+
             std::cerr << "Warning, incorrect number of threads ("
                       << n_threads
                       << "), setting to "
                       << NUM_THREADS
                       << std::endl;
+
             n_threads = NUM_THREADS;
         }
 
         for (int i = 0; i < n_threads; ++i) {
-            queue_threads_.push_back(
-                std::thread(&Processor::processQueue, this)
-            );
+            queue_threads_.push_back(std::thread(&Processor::processQueue, this));
         }
     }
 
@@ -219,6 +226,7 @@ public:
             qthread.join();
         }
     }
+
 
     /// \brief Parse a task definition string and fills the references TaskDef
     ///        structure. Returns true if it's a success, false if a failure 
@@ -279,9 +287,18 @@ public:
         std::queue<TaskDef> queue;
         TaskDef def;
         if (parse(line_org, def)) {
-            std::cerr << "Queueing task '" << line_org << "'." << std::endl;
+            std::lock_guard<std::mutex> lock(mutex_);//<<--Vérouillage à chaque fois que nous écrivons une nouvelle tâche dans la liste
+            
+            std::cerr << "\nWrite task in list, Lockdown" << std::endl;
+            std::cerr << "<-><-><->Queueing task '" << line_org << "'." << std::endl;
+
             task_queue_.push(def);
+            
+            std::cerr << "Task Pushed, Send Notification\n" << std::endl;
+
+            cond_var.notify_one();
         }
+        
     }
 
     /// \brief Returns if the internal queue is empty (true) or not.
@@ -294,18 +311,29 @@ private:
     /// \brief Queue processing thread function.
     void processQueue()
     {
+
         while (should_run_) {
+            std::unique_lock<std::mutex> lock(mutex_); // <<-- Empêche la lecture par plus d'un thread à la fois quand une tâche apparêt dans la liste de tâches
+            cond_var.wait(lock, [this] { return !queueEmpty(); });
+
+            std::cerr << "\nThe Thread "<<std::this_thread::get_id() <<" got a new task!! Lock Task List" << std::endl;
+
             if (!task_queue_.empty()) {
                 TaskDef task_def = task_queue_.front();
                 task_queue_.pop();
+                
+                std::cerr << "<<<--->>> The Thread"<<std::this_thread::get_id() <<" took a task!! Task Remaining: " << task_queue_.size() << std::endl;
+                std::cerr << "<<<--->>>Task list Will be Unlocked!!\n" << std::endl;
+
+                lock.unlock();
                 TaskRunner runner(task_def);
                 runner();
             }
         }
     }
 };
-
 }
+
 
 int main(int argc, char** argv)
 {
@@ -317,22 +345,26 @@ int main(int argc, char** argv)
         file_in.open(argv[1]);
         if (file_in.is_open()) {
             std::cin.rdbuf(file_in.rdbuf());
+
             std::cerr << "Using " << argv[1] << "..." << std::endl;
+
         } else {
+
             std::cerr   << "Error: Cannot open '"
                         << argv[1] 
                         << "', using stdin (press CTRL-D for EOF)." 
                         << std::endl;
+
         }
     } else {
         std::cerr << "Using stdin (press CTRL-D for EOF)." << std::endl;
     }
 
 
-    Processor proc;
+    Processor proc(24);
     
     while (!std::cin.eof()) {
-
+        
         std::string line, line_org;
 
         std::getline(std::cin, line);
