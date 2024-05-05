@@ -19,7 +19,7 @@ namespace gif643 {
 
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
-const int       NUM_THREADS = 1;    // Default value, changed by argv. 
+const int       NUM_THREADS = 24;    // Default value, changed by argv. 
 
 using PNGDataVec = std::vector<char>;
 using PNGDataPtr = std::shared_ptr<PNGDataVec>;
@@ -386,6 +386,8 @@ int main(int argc, char** argv)
 
     std::ifstream file_in;
 
+    int num_thread = NUM_THREADS; //Valeurs par defaut
+
     if (argc >= 2 && (strcmp(argv[1], "-") != 0)) {
         file_in.open(argv[1]);
         if (file_in.is_open()) {
@@ -401,10 +403,18 @@ int main(int argc, char** argv)
         std::cerr << "Using stdin (press CTRL-D for EOF)." << std::endl;
     }
 
-    // TODO: change the number of threads from args.
-    Processor proc; //CHange threads numbers Temporaire
-    proc.initTaskQueueVector();
+    // Verification si un nombre de threads est specifie
+    if(argc >= 3){
+        try{
+            num_thread = std::stoi(argv[argc-1]);
+        } catch(const std::exception& e) {
+            std::cerr << "Invalid number of threads specified: " << argv[argc-1] << " Using default value. " << std::endl;
+        }
+    }
 
+    // TODO: change the number of threads from args.
+    Processor proc(num_thread);
+    proc.initTaskQueueVector();
     while (!std::cin.eof()) {
         
         std::string line, line_org;
