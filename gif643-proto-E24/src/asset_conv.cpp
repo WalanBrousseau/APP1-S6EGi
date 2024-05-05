@@ -18,7 +18,7 @@
 
 namespace gif643 {
 
-std::mutex      mutex_, output_mutex;
+std::mutex      mutex_, PNGHashMapMutex;
 std::condition_variable cond_var;
 
 
@@ -102,7 +102,7 @@ public:
     {
     }
 
-    void operator()()
+    PNGDataPtr operator()()
     {
         const std::string&  fname_in    = task_def_.fname_in;
         const std::string&  fname_out   = task_def_.fname_out;
@@ -119,6 +119,7 @@ public:
 
         NSVGimage*          image_in        = nullptr;
         NSVGrasterizer*     rast            = nullptr;
+        PNGDataPtr data = nullptr;
 
         try {
             // Read the file ...
@@ -167,6 +168,13 @@ public:
                   << fname_in 
                   << "." 
                   << std::endl;
+        return data;
+    }
+
+    void writeDirectly(PNGDataPtr data)
+    {
+        std::ofstream file_out(task_def_.fname_out, std::ofstream::binary);
+        file_out.write(&(data->front()), data->size());
     }
 };
 
@@ -195,7 +203,7 @@ private:
     std::queue<TaskDef> task_queue_;
     std::vector<std::thread> queue_threads_;
 
-    // The cache hash map (TODO). Note that we use the string definition as the // key.
+    // The cache hash map (TODO). Note that we use the string definition as the key.
     using PNGHashMap = std::unordered_map<std::string, PNGDataPtr>;
     PNGHashMap png_cache_;
 
@@ -275,7 +283,11 @@ public:
         TaskDef def;
         if (parse(line_org, def)) {
             TaskRunner runner(def);
-            runner();
+            if (!isCached(def)){
+                addToCache(def, runner());
+                return;
+            }
+            runner.writeDirectly(getCachedPNG(def));
         }
     }
 
@@ -306,6 +318,22 @@ public:
     bool queueEmpty()
     {
         return task_queue_.empty();
+    }
+
+    bool isCached(TaskDef taskDef)
+    {
+        return  png_cache_.find(taskDef.fname_in + std::to_string(taskDef.size)) != png_cache_.end() && !png_cache_.empty();
+    }
+
+    void addToCache(TaskDef taskDef, const PNGDataPtr data)
+    {
+        std::lock_guard<std::mutex> lock(PNGHashMapMutex);
+        png_cache_.emplace(make_pair(taskDef.fname_in + std::to_string(taskDef.size),data));
+    }
+
+    PNGDataPtr getCachedPNG(TaskDef taskDef)
+    {
+        return png_cache_.find(taskDef.fname_in + std::to_string(taskDef.size))->second;
     }
 
 private:
