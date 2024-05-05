@@ -222,12 +222,12 @@ private:
 public:
  void initTaskQueueVector()
     {
-        while (task_queue_.size() < NUM_THREADS )
+        while (task_queue_.size() < nb_threads)
         {
             std::queue<TaskDef> queue{};
             task_queue_.push_back(queue);
         }
-        std::cerr << "Finished initialising the task queue list with : " << task_queue_.size() << "Queues" << std::endl;
+        std::cerr << "Finished initialising the task queue list with : " << task_queue_.size() << " Queues" << std::endl;
     }
 
 
@@ -250,6 +250,7 @@ public:
             n_threads = NUM_THREADS;
         }
         nb_threads = n_threads;
+        std::cerr << "Nombre de thread Construicteur: "<< nb_threads<<" Input: "<< n_threads << std::endl;
     }
 
     ~Processor()
@@ -412,8 +413,12 @@ int main(int argc, char** argv)
         }
     }
 
+    num_thread = 30;
+
     // TODO: change the number of threads from args.
     Processor proc(num_thread);
+    std::cerr << "Thread Number Inputed"<<num_thread<<std::endl;
+    
     proc.initTaskQueueVector();
     while (!std::cin.eof()) {
         
