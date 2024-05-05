@@ -14,6 +14,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <stdio.h>
 
 namespace gif643 {
 
@@ -23,7 +24,7 @@ std::condition_variable cond_var;
 
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
-const int       NUM_THREADS = 1;    // Default value, changed by argv. 
+const int       NUM_THREADS = 4;    // Default value, changed by argv. 
 
 using PNGDataVec = std::vector<char>;
 using PNGDataPtr = std::shared_ptr<PNGDataVec>;
@@ -340,28 +341,45 @@ int main(int argc, char** argv)
     using namespace gif643;
 
     std::ifstream file_in;
+    int num_threads = 0;
 
     if (argc >= 2 && (strcmp(argv[1], "-") != 0)) {
-        file_in.open(argv[1]);
+        num_threads = std::atoi(argv[1]);
+    }
+    else{
+        std::cerr   << "Error: Cannot Get Threads number'"
+                    << argv[2] 
+                    << "', using Default Threads number instead" 
+                    << std::endl;
+        num_threads = NUM_THREADS;
+    }
+
+    if (argc >= 3 && (strcmp(argv[2], "-") != 0)) {
+        file_in.open(argv[2]);
         if (file_in.is_open()) {
             std::cin.rdbuf(file_in.rdbuf());
 
-            std::cerr << "Using " << argv[1] << "..." << std::endl;
+            std::cerr << "Using " << argv[2] << "..." << std::endl;
+            
 
         } else {
 
             std::cerr   << "Error: Cannot open '"
-                        << argv[1] 
+                        << argv[2] 
                         << "', using stdin (press CTRL-D for EOF)." 
                         << std::endl;
 
         }
+        
     } else {
         std::cerr << "Using stdin (press CTRL-D for EOF)." << std::endl;
+        
     }
 
 
-    Processor proc(24);
+    std::cout << "Using " << num_threads << " Threads" << std::endl; 
+    
+    Processor proc(num_threads);
     
     while (!std::cin.eof()) {
         
