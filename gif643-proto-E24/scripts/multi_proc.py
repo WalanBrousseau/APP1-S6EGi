@@ -26,6 +26,7 @@ if __name__ == "__main__":
     for q in queues:
         task_desc = '\n'.join(q)
         task_descs.append(task_desc)
+        print(task_desc)
 
     pool.map(run_process, task_descs)
     
