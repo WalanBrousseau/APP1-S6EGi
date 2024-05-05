@@ -12,6 +12,8 @@
 #include <string>
 #include <cstring>
 #include <thread>
+#include <mutex>
+#include <atomic>
 
 namespace gif643 {
 
@@ -206,24 +208,36 @@ class Processor
 {
 private:
     // The tasks to run queue (FIFO).
-    std::queue<TaskDef> task_queue_;
-
+    std::vector<std::queue<TaskDef>> task_queue_;
+    int list_id{0};
     // The cache hash map (TODO). Note that we use the string definition as the // key.
     using PNGHashMap = std::unordered_map<std::string, PNGDataPtr>;
     PNGHashMap png_cache_;
-
     bool should_run_;           // Used to signal the end of the processor to
                                 // threads.
-
     std::vector<std::thread> queue_threads_;
+    int nb_threads = 0;
+    std::mutex mutex_thread_queue,myPNGHashMapMutex;
 
 public:
+ void initTaskQueueVector()
+    {
+        while (task_queue_.size() < NUM_THREADS )
+        {
+            std::queue<TaskDef> queue{};
+            task_queue_.push_back(queue);
+        }
+        std::cerr << "Finished initialising the task queue list with : " << task_queue_.size() << "Queues" << std::endl;
+    }
+
+
     /// \brief Default constructor.
     ///
     /// Creates background threads that monitors and processes the task queue.
     /// These threads are joined and stopped at the destruction of the instance.
     /// 
     /// \param n_threads: Number of threads (default: NUM_THREADS)
+    
     Processor(int n_threads = NUM_THREADS):
         should_run_(true)
     {
@@ -235,12 +249,7 @@ public:
                       << std::endl;
             n_threads = NUM_THREADS;
         }
-
-        for (int i = 0; i < n_threads; ++i) {
-            queue_threads_.push_back(
-                std::thread(&Processor::processQueue, this)
-            );
-        }
+        nb_threads = n_threads;
     }
 
     ~Processor()
@@ -248,6 +257,37 @@ public:
         should_run_ = false;
         for (auto& qthread: queue_threads_) {
             qthread.join();
+        }
+    }
+
+    void Threads_status()
+    {
+        const int current_nb_threads = nb_threads - queue_threads_.size();
+        {
+            std::lock_guard<std::mutex> lock (mutex_thread_queue);
+            for (int i = 0; i < current_nb_threads; i++)
+            {
+                if(task_queue_[i].size() > 0)
+                {
+                    queue_threads_.push_back(
+                    std::thread(&Processor::processQueue, this,i)
+                    );
+                }
+            }
+        }    
+
+        auto thread = queue_threads_.begin();
+        while (thread != queue_threads_.end() && !queue_threads_.empty())
+        {
+            if (thread->joinable())
+            {
+                thread->join();
+                queue_threads_.erase(thread);
+            }
+            else
+            {
+                thread++;   
+            }
         }
     }
 
@@ -307,11 +347,13 @@ public:
     /// nothing is queued.
     void parseAndQueue(const std::string& line_org)
     {
-        std::queue<TaskDef> queue;
         TaskDef def;
-        if (parse(line_org, def)) {
-            std::cerr << "Queueing task '" << line_org << "'." << std::endl;
-            task_queue_.push(def);
+
+        if (parse(line_org, def)) 
+        {
+            std::cerr << "Queueing task '" << line_org << "'. Task queue size : " << task_queue_[list_id].size() + 1 << std::endl;
+            task_queue_[list_id].push(def);
+            list_id = (list_id + 1) % nb_threads;
         }
     }
 
@@ -323,12 +365,12 @@ public:
 
 private:
     /// \brief Queue processing thread function.
-    void processQueue()
+    void processQueue(int id_queue)
     {
         while (should_run_) {
-            if (!task_queue_.empty()) {
-                TaskDef task_def = task_queue_.front();
-                task_queue_.pop();
+            if (!task_queue_[id_queue].empty()) {
+                TaskDef task_def = task_queue_[id_queue].front();
+                task_queue_[id_queue].pop();
                 TaskRunner runner(task_def);
                 runner();
             }
@@ -360,16 +402,18 @@ int main(int argc, char** argv)
     }
 
     // TODO: change the number of threads from args.
-    Processor proc(24); //CHange threads numbers Temporaire
-    
-    while (!std::cin.eof()) {
+    Processor proc; //CHange threads numbers Temporaire
+    proc.initTaskQueueVector();
 
+    while (!std::cin.eof()) {
+        
         std::string line, line_org;
 
         std::getline(std::cin, line);
         if (!line.empty()) {
             proc.parseAndQueue(line);
         }
+        
     }
 
     if (file_in.is_open()) {
@@ -377,5 +421,8 @@ int main(int argc, char** argv)
     }
 
     // Wait until the processor queue's has tasks to do.
-    while (!proc.queueEmpty()) {};
+    while (!proc.queueEmpty()) {
+        proc.Threads_status();
+    };
+    return 0;
 }
