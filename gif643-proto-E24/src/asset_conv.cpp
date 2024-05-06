@@ -13,6 +13,8 @@
 #include <cstring>
 #include <thread>
 
+#define printEnable 1
+
 namespace gif643 {
 
 const size_t    BPP         = 4;    // Bytes per pixel
@@ -361,14 +363,25 @@ int main(int argc, char** argv)
         std::cerr << "Using stdin (press CTRL-D for EOF)." << std::endl;
     }
 
+    #if printEnable
+        std::cerr << "Number of argc: " << argc << std::endl;
+    #endif
     // Verification si un nombre de threads est specifie
-    if(argc >= 3){
+    if(argc >= 3 != 0){
         try{
             num_thread = std::stoi(argv[argc-1]);
         } catch(const std::exception& e) {
-            std::cerr << "Invalid number of threads specified: " << argv[argc-1] << " Using default value. " << std::endl;
+            #if printEnable
+                std::cerr << "Invalid number of threads specified: " << argv[argc-1] << " Using default value. " << std::endl;
+            #endif
         }
+        #if printEnable
+            std::cerr << "number of threads specified: " << argv[argc-1] << std::endl;
+        #endif
     }
+    #if printEnable
+        std::cerr << "number of threads specified: " << num_thread << std::endl;
+    #endif
 
     // TODO: change the number of threads from args.
     Processor proc(num_thread);
