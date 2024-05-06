@@ -12,32 +12,25 @@
 #include <string>
 #include <cstring>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <stdio.h>
 
 #define printEnable 1
 
 namespace gif643 {
 
+std::mutex      mutex_, PNGHashMapMutex;
+std::condition_variable cond_var;
+
+
 const size_t    BPP         = 4;    // Bytes per pixel
 const float     ORG_WIDTH   = 48.0; // Original SVG image width in px.
-const int       NUM_THREADS = 24;    // Default value, changed by argv. 
+const int       NUM_THREADS = 1;    // Default value, changed by argv. 
 
 using PNGDataVec = std::vector<char>;
 using PNGDataPtr = std::shared_ptr<PNGDataVec>;
-
-/// \brief Wraps callbacks from stbi_image_write
-//
-// Provides a static method to give to stbi_write_png_to_func (rawCallback),
-// which will call with a void* pointer to the instance of PNGWriter.
-// The actual processing should occur in callback(...).
-//
-// Usage (see stbi_write_png for w,h, BPP, image_data and stride parameters): 
-//
-//   PNGWriter writer;
-//   writer(w, h, BPP, image_data, stride); // Will ultimately 
-//                                          // call callback(data, len) and
-//                                          // return when it's done.
-//                                          // Throws if an error occured.
-//
+//Zebi la mouche fait un PNG avec un SVG
 class PNGWriter
 {
 private:
@@ -91,14 +84,7 @@ public:
     }
 };
 
-/// \brief Task definition
-///
-/// fname_in:  The file to process (SVG format)
-/// fname_out: Where to write the result in PNG.
-/// size:      The size, in pixel, of the produced image.
-///
-/// NOTE: Assumes the input SVG is ORG_WIDTH wide (48px) and the result will be
-/// square. Does not matter if it does not fit in the resulting image, it will //// simply be cropped.
+// Resize un SVG Représent la tâche de base
 struct TaskDef
 {
     std::string fname_in;
@@ -106,10 +92,7 @@ struct TaskDef
     int size;
 };
 
-/// \brief A class representing the processing of one SVG file to a PNG stream.
-///
-/// Not thread safe !
-///
+// A class representing the processing of one SVG file to a PNG stream. Not thread safe !
 class TaskRunner
 {
 private:
@@ -121,7 +104,7 @@ public:
     {
     }
 
-    void operator()()
+    PNGDataPtr operator()()
     {
         const std::string&  fname_in    = task_def_.fname_in;
         const std::string&  fname_out   = task_def_.fname_out;
@@ -138,6 +121,7 @@ public:
 
         NSVGimage*          image_in        = nullptr;
         NSVGrasterizer*     rast            = nullptr;
+        PNGDataPtr data = nullptr;
 
         try {
             // Read the file ...
@@ -186,6 +170,13 @@ public:
                   << fname_in 
                   << "." 
                   << std::endl;
+        return data;
+    }
+
+    void writeDirectly(PNGDataPtr data)
+    {
+        std::ofstream file_out(task_def_.fname_out, std::ofstream::binary);
+        file_out.write(&(data->front()), data->size());
     }
 };
 
@@ -207,41 +198,35 @@ public:
 class Processor
 {
 private:
+    bool should_run_; // Used to signal the end of the processor to threads.
+    int running_Threads_nb = 0;
+
     // The tasks to run queue (FIFO).
     std::queue<TaskDef> task_queue_;
+    std::vector<std::thread> queue_threads_;
 
-    // The cache hash map (TODO). Note that we use the string definition as the // key.
+    // The cache hash map (TODO). Note that we use the string definition as the key.
     using PNGHashMap = std::unordered_map<std::string, PNGDataPtr>;
     PNGHashMap png_cache_;
 
-    bool should_run_;           // Used to signal the end of the processor to
-                                // threads.
-
-    std::vector<std::thread> queue_threads_;
-
+    
 public:
-    /// \brief Default constructor.
-    ///
-    /// Creates background threads that monitors and processes the task queue.
-    /// These threads are joined and stopped at the destruction of the instance.
-    /// 
-    /// \param n_threads: Number of threads (default: NUM_THREADS)
     Processor(int n_threads = NUM_THREADS):
         should_run_(true)
     {
         if (n_threads <= 0) {
+
             std::cerr << "Warning, incorrect number of threads ("
                       << n_threads
                       << "), setting to "
                       << NUM_THREADS
                       << std::endl;
+
             n_threads = NUM_THREADS;
         }
 
         for (int i = 0; i < n_threads; ++i) {
-            queue_threads_.push_back(
-                std::thread(&Processor::processQueue, this)
-            );
+            queue_threads_.push_back(std::thread(&Processor::processQueue, this));
         }
     }
 
@@ -252,6 +237,7 @@ public:
             qthread.join();
         }
     }
+
 
     /// \brief Parse a task definition string and fills the references TaskDef
     ///        structure. Returns true if it's a success, false if a failure 
@@ -299,7 +285,11 @@ public:
         TaskDef def;
         if (parse(line_org, def)) {
             TaskRunner runner(def);
-            runner();
+            if (!isCached(def)){
+                addToCache(def, runner());
+                return;
+            }
+            runner.writeDirectly(getCachedPNG(def));
         }
     }
 
@@ -312,9 +302,18 @@ public:
         std::queue<TaskDef> queue;
         TaskDef def;
         if (parse(line_org, def)) {
-            std::cerr << "Queueing task '" << line_org << "'." << std::endl;
+            std::lock_guard<std::mutex> lock(mutex_);//<<--Vérouillage à chaque fois que nous écrivons une nouvelle tâche dans la liste
+            
+            std::cerr << "\nWrite task in list, Lockdown" << std::endl;
+            std::cerr << "<-><-><->Queueing task '" << line_org << "'." << std::endl;
+
             task_queue_.push(def);
+            
+            std::cerr << "Task Pushed, Send Notification\n" << std::endl;
+
+            cond_var.notify_one();
         }
+        
     }
 
     /// \brief Returns if the internal queue is empty (true) or not.
@@ -323,71 +322,97 @@ public:
         return task_queue_.empty();
     }
 
+    bool isCached(TaskDef taskDef)
+    {
+        return  png_cache_.find(taskDef.fname_in + std::to_string(taskDef.size)) != png_cache_.end() && !png_cache_.empty();
+    }
+
+    void addToCache(TaskDef taskDef, const PNGDataPtr data)
+    {
+        std::lock_guard<std::mutex> lock(PNGHashMapMutex);
+        png_cache_.emplace(make_pair(taskDef.fname_in + std::to_string(taskDef.size),data));
+    }
+
+    PNGDataPtr getCachedPNG(TaskDef taskDef)
+    {
+        return png_cache_.find(taskDef.fname_in + std::to_string(taskDef.size))->second;
+    }
+
 private:
     /// \brief Queue processing thread function.
     void processQueue()
     {
+
         while (should_run_) {
+            std::unique_lock<std::mutex> lock(mutex_); // <<-- Empêche la lecture par plus d'un thread à la fois quand une tâche apparêt dans la liste de tâches
+            cond_var.wait(lock, [this] { return !queueEmpty(); });
+
+            std::cerr << "\nThe Thread "<<std::this_thread::get_id() <<" got a new task!! Lock Task List" << std::endl;
+
             if (!task_queue_.empty()) {
                 TaskDef task_def = task_queue_.front();
                 task_queue_.pop();
+                
+                std::cerr << "<<<--->>> The Thread"<<std::this_thread::get_id() <<" took a task!! Task Remaining: " << task_queue_.size() << std::endl;
+                std::cerr << "<<<--->>>Task list Will be Unlocked!!\n" << std::endl;
+
+                lock.unlock();
                 TaskRunner runner(task_def);
                 runner();
             }
         }
     }
 };
-
 }
+
 
 int main(int argc, char** argv)
 {
     using namespace gif643;
 
     std::ifstream file_in;
-
-    int num_thread = NUM_THREADS; //Valeurs par defaut
+    int num_threads = 0;
 
     if (argc >= 2 && (strcmp(argv[1], "-") != 0)) {
-        file_in.open(argv[1]);
+        num_threads = std::atoi(argv[1]);
+    }
+    else{
+        std::cerr   << "Error: Cannot Get Threads number'"
+                    << argv[2] 
+                    << "', using Default Threads number instead" 
+                    << std::endl;
+        num_threads = NUM_THREADS;
+    }
+
+    if (argc >= 3 && (strcmp(argv[2], "-") != 0)) {
+        file_in.open(argv[2]);
         if (file_in.is_open()) {
             std::cin.rdbuf(file_in.rdbuf());
-            std::cerr << "Using " << argv[1] << "..." << std::endl;
+
+            std::cerr << "Using " << argv[2] << "..." << std::endl;
+            
+
         } else {
+
             std::cerr   << "Error: Cannot open '"
-                        << argv[1] 
+                        << argv[2] 
                         << "', using stdin (press CTRL-D for EOF)." 
                         << std::endl;
+
         }
+        
     } else {
         std::cerr << "Using stdin (press CTRL-D for EOF)." << std::endl;
+        
     }
 
-    #if printEnable
-        std::cerr << "Number of argc: " << argc << std::endl;
-    #endif
-    // Verification si un nombre de threads est specifie
-    if(argc >= 3 != 0){
-        try{
-            num_thread = std::stoi(argv[argc-1]);
-        } catch(const std::exception& e) {
-            #if printEnable
-                std::cerr << "Invalid number of threads specified: " << argv[argc-1] << " Using default value. " << std::endl;
-            #endif
-        }
-        #if printEnable
-            std::cerr << "number of threads specified: " << argv[argc-1] << std::endl;
-        #endif
-    }
-    #if printEnable
-        std::cerr << "number of threads specified: " << num_thread << std::endl;
-    #endif
 
-    // TODO: change the number of threads from args.
-    Processor proc(num_thread);
+    std::cout << "Using " << num_threads << " Threads" << std::endl; 
+    
+    Processor proc(num_threads);
     
     while (!std::cin.eof()) {
-
+        
         std::string line, line_org;
 
         std::getline(std::cin, line);

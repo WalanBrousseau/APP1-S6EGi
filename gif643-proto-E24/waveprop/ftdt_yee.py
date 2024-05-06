@@ -36,6 +36,23 @@ shared_matrix2 = numpy.ndarray(shape=(MATRIX_SIZE, MATRIX_SIZE, MATRIX_SIZE, 3),
 shared_matrix[:] = numpy.zeros(shape=shared_matrix.shape)
 shared_matrix2[:] = numpy.zeros(shape=shared_matrix2.shape)
 
+    curl_H[:,:,1:,1] += H[:,:,1:,0] - H[:,:,:-1,0]
+    curl_H[1:,:,:,1] -= H[1:,:,:,2] - H[:-1,:,:,2]
+
+    curl_H[1:,:,:,2] += H[1:,:,:,1] - H[:-1,:,:,1]
+    curl_H[:,1:,:,2] -= H[:,1:,:,0] - H[:,:-1,:,0]
+    return curl_H
+
+
+def timestep(E, H, courant_number, source_pos, source_val):
+    E += courant_number * curl_H(H)
+    E[source_pos] += source_val
+    H -= courant_number * curl_E(E)
+    print(f"E: {E}")
+    print(f"H: {H}")
+    return E, H
+
+
 class WaveEquation:
     def __init__(self, s, courant_number, source):
         s = s + (3,)
@@ -58,7 +75,11 @@ class WaveEquation:
             field = field[:, slice_index, :, field_component]
         elif slice == 2:
             field = field[:, :, slice_index, field_component]
-        signal_and_wait(subproc)    
+        source_pos, source_index = source(self.index)
+        self.E, self.H = timestep(self.E, self.H, self.courant_number, source_pos, source_index)
+        print(f"self.E: {self.E}")
+        print(f"self.H: {self.H}")
+        print(f"slice_Index: {slice_index}")
 
         if initial:
             axes = figure.add_subplot(111)

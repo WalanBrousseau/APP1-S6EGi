@@ -16,7 +16,8 @@ def signal_and_wait(subproc):
     subproc.stdin.write("START\n".encode())
     subproc.stdin.flush()                   # Nécessaire pour vider le tampon de sortie
     res = subproc.stdout.readline()
-    #print(res)
+    print("Affichage valeur")
+    print(float(res.decode().strip()))
 
 FNAME       = "GIF642-labo-shm"
 MATRIX_SIZE = 4

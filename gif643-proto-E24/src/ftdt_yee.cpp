@@ -15,6 +15,9 @@
 #include <string.h>
 #include <math.h>
 #include <thread>
+#include <vector>
+#include <algorithm>
+#include <array>
 
 // Taille de la matrice de travail (un côté)
 static const int MATRIX_SIZE = 100;
@@ -23,6 +26,9 @@ static const int BUFFER_SIZE = MATRIX_SIZE * MATRIX_SIZE * MATRIX_SIZE * 3 * siz
 // Tampon générique à utiliser pour créer le fichier
 char buffer_[BUFFER_SIZE];
 char buffer_2[BUFFER_SIZE];
+
+double* val1;
+double* val2;
 
 void wait_signal()
 {
@@ -35,7 +41,15 @@ void wait_signal()
 void ack_signal()
 {
     // Répond avec un message vide.
-    std::cout << "" << std::endl;
+    //std::vector<double> combined = {val1,val2};
+
+    // Ajouter les éléments des tableaux
+    //combined.insert(combined.end(), std::begin(val1), std::end(val1));
+    //std::copy(combined.begin(), combined.end(), std::ostreambuf_iterator<double*>(std::cout, ""));
+    std::cout << val1 << " " << val2 << std::endl;
+    //double* ptr = val1;
+    //std::cerr << "tableau1: " << ptr << std::endl;
+    //std::cout << val1 << std::endl;
 }
 
 double* curl_E(const double* E, double* curl_E, double courant_valeur) 
@@ -168,6 +182,7 @@ double* sum_Array(double* dest, double* content,bool addition=true)
             }
         }
     }
+    std::cerr << "Resultat autre: " << &dest << std::endl;
     return dest;
 }
 
@@ -176,11 +191,11 @@ void calcul(double* E, double*& H, const double courant_number,const int source_
     double* curl_E_ = new double[MATRIX_SIZE*MATRIX_SIZE*MATRIX_SIZE*3]{0};
     double* curl_H_ = new double[MATRIX_SIZE*MATRIX_SIZE*MATRIX_SIZE*3]{0};
     curl_H_ = curl_H(H,curl_H_,courant_number);
-    sum_Array(E,curl_H_);
+    val1 = sum_Array(E,curl_H_);
     E[source_pos[0]*(MATRIX_SIZE^3) + source_pos[1]*(MATRIX_SIZE^2) + source_pos[2]*MATRIX_SIZE] += source_val;
 
     curl_E_ = curl_E(E,curl_E_,courant_number);
-    sum_Array(H,curl_E_,false);
+    val2 = sum_Array(H,curl_E_,false);
     delete[] curl_E_;
     delete[] curl_H_;
 }

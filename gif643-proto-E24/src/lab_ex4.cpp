@@ -31,7 +31,7 @@ void wait_signal()
 void ack_signal()
 {
     // Répond avec un message vide.
-    std::cout << "" << std::endl;
+    std::cout << "41.0" << std::endl;
 }
 
 int main(int argc, char** argv)
