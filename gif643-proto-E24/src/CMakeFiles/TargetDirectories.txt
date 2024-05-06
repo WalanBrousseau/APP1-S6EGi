@@ -1,0 +1,10 @@
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/nanosvg.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/stb_image.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/asset_conv.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/lab_ex1.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/lab_ex2.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/lab_ex3.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/lab_ex4.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/ftdt_yee.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/edit_cache.dir
+/home/walanb/Documents/GitKraken/APP1-S6EGi/gif643-proto-E24/src/CMakeFiles/rebuild_cache.dir

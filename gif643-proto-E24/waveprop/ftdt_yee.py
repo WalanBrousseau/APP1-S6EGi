@@ -32,6 +32,8 @@ def timestep(E, H, courant_number, source_pos, source_val):
     E += courant_number * curl_H(H)
     E[source_pos] += source_val
     H -= courant_number * curl_E(E)
+    print(f"E: {E}")
+    print(f"H: {H}")
     return E, H
 
 
@@ -58,6 +60,9 @@ class WaveEquation:
             field = field[:, :, slice_index, field_component]
         source_pos, source_index = source(self.index)
         self.E, self.H = timestep(self.E, self.H, self.courant_number, source_pos, source_index)
+        print(f"self.E: {self.E}")
+        print(f"self.H: {self.H}")
+        print(f"slice_Index: {slice_index}")
 
         if initial:
             axes = figure.add_subplot(111)
